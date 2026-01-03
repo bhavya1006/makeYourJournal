@@ -1,0 +1,119 @@
+-- Enable required extension
+create extension if not exists "uuid-ossp";
+
+-- =========================
+-- TASKS TABLE
+-- =========================
+create table if not exists public.tasks (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  title text not null,
+  created_at timestamp with time zone default now()
+);
+
+-- =========================
+-- TASK COMPLETIONS TABLE
+-- =========================
+create table if not exists public.task_completions (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  task_id uuid not null references public.tasks(id) on delete cascade,
+  date date not null,
+  completed boolean default true,
+  unique (task_id, date)
+);
+
+-- =========================
+-- JOURNALS TABLE
+-- =========================
+create table if not exists public.journals (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  date date not null,
+  title text,
+  content text,
+  unique (user_id, date)
+);
+
+-- =========================
+-- INDEXES (PERFORMANCE)
+-- =========================
+create index if not exists idx_tasks_user on public.tasks(user_id);
+create index if not exists idx_completions_user on public.task_completions(user_id);
+create index if not exists idx_journals_user on public.journals(user_id);
+
+-- =========================
+-- ENABLE ROW LEVEL SECURITY
+-- =========================
+alter table public.tasks enable row level security;
+alter table public.task_completions enable row level security;
+alter table public.journals enable row level security;
+
+-- =========================
+-- RLS POLICIES: TASKS
+-- =========================
+create policy "Users can read their tasks"
+on public.tasks
+for select
+using (auth.uid() = user_id);
+
+create policy "Users can insert their tasks"
+on public.tasks
+for insert
+with check (auth.uid() = user_id);
+
+create policy "Users can update their tasks"
+on public.tasks
+for update
+using (auth.uid() = user_id);
+
+create policy "Users can delete their tasks"
+on public.tasks
+for delete
+using (auth.uid() = user_id);
+
+-- =========================
+-- RLS POLICIES: TASK COMPLETIONS
+-- =========================
+create policy "Users can read their completions"
+on public.task_completions
+for select
+using (auth.uid() = user_id);
+
+create policy "Users can insert their completions"
+on public.task_completions
+for insert
+with check (auth.uid() = user_id);
+
+create policy "Users can update their completions"
+on public.task_completions
+for update
+using (auth.uid() = user_id);
+
+create policy "Users can delete their completions"
+on public.task_completions
+for delete
+using (auth.uid() = user_id);
+
+-- =========================
+-- RLS POLICIES: JOURNALS
+-- =========================
+create policy "Users can read their journals"
+on public.journals
+for select
+using (auth.uid() = user_id);
+
+create policy "Users can insert their journals"
+on public.journals
+for insert
+with check (auth.uid() = user_id);
+
+create policy "Users can update their journals"
+on public.journals
+for update
+using (auth.uid() = user_id);
+
+create policy "Users can delete their journals"
+on public.journals
+for delete
+using (auth.uid() = user_id);
