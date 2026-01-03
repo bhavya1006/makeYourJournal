@@ -1,9 +1,18 @@
+import { useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
-import { ComposedChart, Scatter, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import {
+  ComposedChart,
+  Scatter,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+} from 'recharts';
 import { TrendingUp, Calendar, CheckCircle2 } from 'lucide-react';
 
 interface ProgressData {
-  date: string;
+  date: string; // YYYY-MM-DD
   completion: number;
   day: string;
   tasksCompleted: number;
@@ -15,35 +24,29 @@ interface ProgressGraphProps {
 }
 
 export function ProgressGraph({ data }: ProgressGraphProps) {
-  const averageCompletion = data.length > 0
-    ? Math.round(data.reduce((sum, item) => sum + item.completion, 0) / data.length)
-    : 0;
+  const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  // Calculate max tasks completed and set Y-axis max
+  const averageCompletion =
+    data.length > 0
+      ? Math.round(
+          data.reduce((sum, item) => sum + item.completion, 0) / data.length
+        )
+      : 0;
+
   const maxTasksCompleted = Math.max(...data.map(d => d.tasksCompleted), 0);
   const totalTasks = data.length > 0 ? data[0].totalTasks : 10;
-  
-  // Set Y-axis max to total tasks for better scaling
   const yAxisMax = Math.max(totalTasks, maxTasksCompleted + 1);
-  
-  // Generate Y-axis ticks dynamically
+
   const generateYTicks = () => {
-    const ticks = [];
-    // Create nice round numbers for ticks
-    const step = yAxisMax <= 5 ? 1 : yAxisMax <= 10 ? 2 : Math.ceil(yAxisMax / 5);
-    for (let i = 0; i <= yAxisMax; i += step) {
-      ticks.push(i);
-    }
-    // Always include the max value
-    if (!ticks.includes(yAxisMax)) {
-      ticks.push(yAxisMax);
-    }
+    const ticks: number[] = [];
+    const step =
+      yAxisMax <= 5 ? 1 : yAxisMax <= 10 ? 2 : Math.ceil(yAxisMax / 5);
+    for (let i = 0; i <= yAxisMax; i += step) ticks.push(i);
+    if (!ticks.includes(yAxisMax)) ticks.push(yAxisMax);
     return ticks;
   };
 
-  // Custom dot component to highlight points
-  const CustomDot = (props: any) => {
-    const { cx, cy } = props;
+  const CustomDot = ({ cx, cy }: any) => {
     if (!cx || !cy) return null;
     return (
       <circle
@@ -56,6 +59,30 @@ export function ProgressGraph({ data }: ProgressGraphProps) {
       />
     );
   };
+
+  /** 🔹 AUTO CENTER TODAY ON LOAD */
+  const today = new Date().toISOString().slice(0, 10);
+  const todayIndex = data.findIndex(d => d.date === today);
+
+  useEffect(() => {
+    if (!scrollRef.current || todayIndex === -1) return;
+
+    const container = scrollRef.current;
+    const containerWidth = container.clientWidth;
+
+    const chartWidth =
+      typeof window !== 'undefined' && window.innerWidth < 640 ? 320 : 450;
+
+    const itemWidth = chartWidth / data.length;
+
+    const scrollTo =
+      todayIndex * itemWidth - containerWidth / 2 + itemWidth / 2;
+
+    container.scrollTo({
+      left: Math.max(0, scrollTo),
+      behavior: 'smooth',
+    });
+  }, [todayIndex, data.length]);
 
   return (
     <motion.div
@@ -72,83 +99,99 @@ export function ProgressGraph({ data }: ProgressGraphProps) {
           </div>
           <div>
             <h3 className="text-sm sm:text-base">Progress</h3>
-            <p className="text-muted-foreground text-xs sm:text-sm">Last 7 days</p>
+            <p className="text-muted-foreground text-xs sm:text-sm">
+              Last 7 days
+            </p>
           </div>
         </div>
         <div className="text-right">
-          <div className="flex items-baseline gap-1">
-            <span className="text-xl sm:text-2xl">{averageCompletion}%</span>
-          </div>
-          <p className="text-muted-foreground text-xs sm:text-sm">Avg completion</p>
+          <span className="text-xl sm:text-2xl">{averageCompletion}%</span>
+          <p className="text-muted-foreground text-xs sm:text-sm">
+            Avg completion
+          </p>
         </div>
       </div>
 
       {/* Chart */}
-      {data && data.length > 0 ? (
-        <div className="w-full overflow-x-auto overflow-y-hidden scrollbar-hide">
+      {data.length > 0 ? (
+        <div
+          ref={scrollRef}
+          className="w-full overflow-x-auto overflow-y-hidden scrollbar-hide"
+        >
           <div className="min-w-[320px]">
             <ComposedChart
               data={data}
-              width={typeof window != 'undefined' && window.innerWidth < 640 ? 320 : 450}
+              width={
+                typeof window !== 'undefined' && window.innerWidth < 640
+                  ? 320
+                  : 450
+              }
               height={320}
-              margin={{ top:10, right:10, left:-20, bottom:0}}
+              margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
             >
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke="#f0f0f0"
+                vertical={false}
+              />
               <XAxis
-                type="category"
                 dataKey="day"
-                allowDuplicatedCategory={false}
                 axisLine={false}
                 tickLine={false}
                 tick={{ fill: '#9ca3af', fontSize: 11 }}
               />
               <YAxis
-                type="number"
                 axisLine={false}
                 tickLine={false}
                 tick={{ fill: '#9ca3af', fontSize: 11 }}
                 ticks={generateYTicks()}
                 domain={[0, yAxisMax]}
-                label={{ value: 'Tasks Completed', angle: -90, position: 'insideLeft', style: { fill: '#9ca3af', fontSize: 10 } }}
+                label={{
+                  value: 'Tasks Completed',
+                  angle: -90,
+                  position: 'insideLeft',
+                  style: { fill: '#9ca3af', fontSize: 10 },
+                }}
               />
-              {/* <ZAxis range={[100, 100]} /> */}
               <Tooltip
+                cursor={{
+                  stroke: '#667eea',
+                  strokeWidth: 1,
+                  strokeDasharray: '5 5',
+                }}
                 content={({ active, payload }) => {
                   if (active && payload && payload.length) {
+                    const d = payload[0].payload;
                     return (
                       <div className="bg-white rounded-lg shadow-lg border border-border/50 p-3">
-                        <p className="text-muted-foreground mb-1 text-xs">{payload[0].payload.date}</p>
+                        <p className="text-muted-foreground text-xs mb-1">
+                          {d.date}
+                        </p>
                         <div className="flex items-center gap-2">
                           <CheckCircle2 className="size-4 text-primary" />
-                          <p className="flex items-baseline gap-1">
-                            <span className="text-lg">{payload[0].payload.tasksCompleted}</span>
-                            <span className="text-muted-foreground text-xs">
-                              / {payload[0].payload.totalTasks} tasks
-                            </span>
-                          </p>
+                          <span className="text-lg">{d.tasksCompleted}</span>
+                          <span className="text-muted-foreground text-xs">
+                            / {d.totalTasks}
+                          </span>
                         </div>
-                        <p className="text-muted-foreground mt-1 text-xs">
-                          {payload[0].payload.completion}% completed
+                        <p className="text-muted-foreground text-xs mt-1">
+                          {d.completion}% completed
                         </p>
                       </div>
                     );
                   }
                   return null;
                 }}
-                cursor={{ stroke: '#667eea', strokeWidth: 1, strokeDasharray: '5 5' }}
               />
-              {/* Dashed connecting line */}
               <Line
                 type="monotone"
                 dataKey="tasksCompleted"
-                stroke="rgba(0, 0, 0, 0.4)"
+                stroke="rgba(0,0,0,0.4)"
                 strokeWidth={2}
                 strokeDasharray="5 5"
                 dot={false}
               />
-              {/* Scatter points on top */}
               <Scatter
-                data={data}
                 dataKey="tasksCompleted"
                 fill="#667eea"
                 shape={<CustomDot />}
@@ -157,35 +200,39 @@ export function ProgressGraph({ data }: ProgressGraphProps) {
           </div>
         </div>
       ) : (
-        <div className="w-full h-80 flex items-center justify-center bg-muted/30 rounded-lg">
+        <div className="h-80 flex items-center justify-center bg-muted/30 rounded-lg">
           <p className="text-muted-foreground text-sm">No data available</p>
         </div>
       )}
 
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 pt-4 border-t border-border/50">
-        <div className="bg-muted/30 rounded-lg p-2 sm:p-3">
+      <div className="grid grid-cols-2 gap-4 pt-4 border-t border-border/50">
+        <div className="bg-muted/30 rounded-lg p-3">
           <div className="flex items-center gap-2 mb-1">
-            <Calendar className="size-3 sm:size-4 text-muted-foreground" />
-            <p className="text-muted-foreground text-xs sm:text-sm">Best day</p>
+            <Calendar className="size-4 text-muted-foreground" />
+            <p className="text-muted-foreground text-sm">Best day</p>
           </div>
-          <p className="text-sm sm:text-base">
+          <p>
             {data.length > 0
-              ? data.reduce((best, current) =>
-                  current.tasksCompleted > best.tasksCompleted ? current : best
+              ? data.reduce((a, b) =>
+                  b.tasksCompleted > a.tasksCompleted ? b : a
                 ).day
               : 'N/A'}
           </p>
         </div>
-        <div className="bg-muted/30 rounded-lg p-2 sm:p-3">
+        <div className="bg-muted/30 rounded-lg p-3">
           <div className="flex items-center gap-2 mb-1">
-            <TrendingUp className="size-3 sm:size-4 text-muted-foreground" />
-            <p className="text-muted-foreground text-xs sm:text-sm">Trend</p>
+            <TrendingUp className="size-4 text-muted-foreground" />
+            <p className="text-muted-foreground text-sm">Trend</p>
           </div>
-          <p className="text-sm sm:text-base">
-            {data.length >= 2 && data[data.length - 1].tasksCompleted > data[0].tasksCompleted
+          <p>
+            {data.length >= 2 &&
+            data[data.length - 1].tasksCompleted >
+              data[0].tasksCompleted
               ? '↗ Improving'
-              : data.length >= 2 && data[data.length - 1].tasksCompleted < data[0].tasksCompleted
+              : data.length >= 2 &&
+                data[data.length - 1].tasksCompleted <
+                  data[0].tasksCompleted
               ? '↘ Declining'
               : '→ Stable'}
           </p>

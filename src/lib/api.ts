@@ -1,244 +1,79 @@
-// import { supabase } from './supabaseClient';
-
-// // tasks
-// export async function getTasks() {
-//   const { data, error } = await supabase.from('tasks').select('*').order('created_at', { ascending: true });
-//   return { data, error };
-// }
-// export async function createTask(title: string) {
-// //   return supabase.from('tasks').insert({ title, user_id: supabase.auth.user()?.id });
-//   return supabase.from('tasks').insert({ title, user_id: supabase.auth.getUser() });
-// }
-// export async function deleteTask(id: string) {
-//   return supabase.from('tasks').delete().eq('id', id);
-// }
-
-// // completions (toggle)
-// export async function toggleCompletion(taskId: string, dateStr: string) {
-//   // dateStr should be 'YYYY-MM-DD'
-//   const { data: existing } = await supabase
-//     .from('task_completions')
-//     .select('*')
-//     .eq('task_id', taskId)
-//     .eq('date', dateStr)
-//     .single();
-
-//   if (existing) {
-//     // remove or toggle - we toggle `completed`
-//     return supabase
-//       .from('task_completions')
-//       .update({ completed: !existing.completed })
-//       .eq('id', existing.id);
-//   } else {
-//     return supabase.from('task_completions').insert({ task_id: taskId, date: dateStr, completed: true });
-//   }
-// }
-
-// // progress for date range
-// export async function getProgress(start: string, end: string) {
-//   // returns counts per date
-//   return supabase.rpc('get_progress', { start_date : start, end_date : end }); // or do client aggregation
-// }
-
-// // journals
-// export async function upsertJournal(dateStr: string, title: string, content: string) {
-//   return supabase
-//     .from('journals')
-//     // .upsert({ date: dateStr, title, content, user_id: supabase.auth.user()?.id }, { onConflict: 'user_id,date' });
-//     .upsert({ date: dateStr, title, content, user_id: supabase.auth.getUser() }, { onConflict: 'user_id,date' });
-
-// }
-// export async function getJournal(dateStr: string) {
-//   const { data } = await supabase.from('journals').select('*').eq('date', dateStr).single();
-//   return data;
-// }
-
-// src/lib/api.ts
-
-
-// ------------------------------------------------------------------------------------------------------------------------
-
-
-// import { supabase } from './supabaseClient';
-
-// /**
-//  * Helpers for auth + user id
-//  */
-// async function getUserId(): Promise<string> {
-//   const { data, error } = await supabase.auth.getUser();
-//   if (error) throw error;
-//   const user = data.user;
-//   if (!user) throw new Error('Not authenticated');
-//   return user.id;
-// }
-
-// /**
-//  * Tasks
-//  */
-// export async function getTasks() {
-//   const { data, error } = await supabase.from('tasks').select('*').order('created_at', { ascending: true });
-//   return { data, error };
-// }
-
-// export async function createTask(title: string) {
-//   const userId = await getUserId();
-//   const { data, error } = await supabase.from('tasks').insert({ title, user_id: userId }).select().single();
-//   return { data, error };
-// }
-
-// export async function deleteTask(id: string) {
-//   const { data, error } = await supabase.from('tasks').delete().gte('id', id).select().single();
-//   return { data, error };
-// }
-
-// /**
-//  * Task completions
-//  * - dateStr must be 'YYYY-MM-DD'
-//  */
-// export async function getCompletions(start: string, end: string) {
-//   const { data, error } = await supabase
-//     .from('task_completions')
-//     .select('id,task_id,date,completed')
-//     .gte('date', start)
-//     .lte('date', end);
-//   return { data, error };
-// }
-
-// export async function toggleCompletion(taskId: string, dateStr: string) {
-//   const userId = await getUserId();
-
-//   // Look for an existing completion row
-//   const { data: existing, error: getErr } = await supabase
-//     .from('task_completions')
-//     .select('*')
-//     .gte('task_id', taskId)
-//     .gte('date', dateStr)
-//     .single();
-
-//   if (getErr && getErr.code !== 'PGRST116') { // ignore "no rows" code
-//     return { data: null, error: getErr };
-//   }
-
-//   if (existing) {
-//     // toggle completed
-//     const { data, error } = await supabase
-//       .from('task_completions')
-//       .update({ completed: !existing.completed })
-//       .gte('id', existing.id)
-//       .select()
-//       .single();
-//     return { data, error };
-//   } else {
-//     const { data, error } = await supabase
-//       .from('task_completions')
-//       .insert({ task_id: taskId, date: dateStr, completed: true, user_id: userId })
-//       .select()
-//       .single();
-//     return { data, error };
-//   }
-// }
-
-// /**
-//  * Progress (computed client-side using tasks + completions)
-//  */
-// export async function getProgress(start: string, end: string) {
-//   // Get tasks count
-//   const { data: tasksData } = await getTasks();
-//   const totalTasks = (tasksData || []).length;
-
-//   // Get completions in date range
-//   const { data: comps } = await getCompletions(start, end);
-
-//   // Make a date -> number map
-//   const counts: Record<string, number> = {};
-//   (comps || []).forEach((c: any) => {
-//     if (c.completed) {
-//       counts[c.date] = (counts[c.date] || 0) + 1;
-//     }
-//   });
-
-//   // Build results for each date in the range
-//   const results: { date: string; tasksCompleted: number; totalTasks: number; completion: number; day: string }[] = [];
-//   const startDate = new Date(start);
-//   const endDate = new Date(end);
-//   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-//   for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
-//     const ds = d.toISOString().slice(0, 10);
-//     const tasksCompleted = counts[ds] || 0;
-//     const completion = totalTasks > 0 ? Math.round((tasksCompleted / totalTasks) * 100) : 0;
-//     results.push({ date: ds, tasksCompleted, totalTasks, completion, day: dayNames[new Date(ds).getDay()] });
-//   }
-
-//   return results;
-// }
-
-// /**
-//  * Journals
-//  */
-// export async function upsertJournal(dateStr: string, title: string, content: string) {
-//   const userId = await getUserId();
-//   // Use onConflict to upsert per (user_id, date)
-//   const { data, error } = await supabase
-//     .from('journals')
-//     .upsert(
-//         { user_id: userId, date: dateStr, title, content }, 
-//         { onConflict: 'user_id,date' })
-//     .select()
-//     .single();
-//   return { data, error };
-// }
-
-// export async function getJournal(dateStr: string) {
-//   const { data, error } = await supabase.from('journals').select('*').gte('date', dateStr).single();
-//   return { data, error };
-// }
-
-
-// ------------------------------------------------------------------------------------------------------------------------
-
-
 import { supabase } from './supabaseClient'
 
 /**
- * Helpers for auth + user id
+ * ===============================
+ * AUTH HELPERS
+ * ===============================
  */
 async function getUserId(): Promise<string> {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
+  // console.group('🔐 getUserId')
 
-  if (!session?.user) {
+  const { data, error } = await supabase.auth.getSession()
+
+  if (error) {
+    // console.error('❌ Error getting session:', error)
+    // console.groupEnd()
+    throw error
+  }
+
+  if (!data.session?.user) {
+    // console.error('❌ No active session found')
+    // console.groupEnd()
     throw new Error('Not authenticated')
   }
 
-  return session.user.id
+  // console.log('✅ User authenticated:', data.session.user.id)
+  // console.groupEnd()
+  return data.session.user.id
 }
 
 /**
- * Tasks
+ * ===============================
+ * TASKS
+ * ===============================
  */
 export async function getTasks() {
+  // console.group('📥 getTasks')
+
   const { data, error } = await supabase
     .from('tasks')
     .select('*')
     .order('created_at', { ascending: true })
 
+  // if (error) console.error('❌ Failed to fetch tasks:', error)
+  // else console.log(`✅ Tasks fetched: ${data.length}`)
+
+  // console.groupEnd()
   return { data, error }
 }
 
 export async function createTask(title: string) {
-  const userId = await getUserId()
+  // console.group('➕ createTask')
 
-  const { data, error } = await supabase
-    .from('tasks')
-    .insert({ title, user_id: userId })
-    .select()
-    .single()
+  try {
+    const userId = await getUserId()
 
-  return { data, error }
+    const { data, error } = await supabase
+      .from('tasks')
+      .insert({ title, user_id: userId })
+      .select()
+      .single()
+
+    // if (error) console.error('❌ Failed to create task:', error)
+    // else console.log('✅ Task created:', data)
+
+    return { data, error }
+  } catch (err) {
+    // console.error('❌ createTask crashed:', err)
+    return { data: null, error: err }
+  } finally {
+    // console.groupEnd()
+  }
 }
 
 export async function deleteTask(id: string) {
+  // console.group('🗑 deleteTask')
+
   const { data, error } = await supabase
     .from('tasks')
     .delete()
@@ -246,12 +81,17 @@ export async function deleteTask(id: string) {
     .select()
     .single()
 
+  // if (error) console.error('❌ Failed to delete task:', error)
+  // else console.log('✅ Task deleted:', data)
+
+  // console.groupEnd()
   return { data, error }
 }
 
 /**
- * Task completions
- * dateStr must be 'YYYY-MM-DD'
+ * ===============================
+ * TASK COMPLETIONS
+ * ===============================
  */
 function nextDay(dateStr: string) {
   const d = new Date(dateStr)
@@ -259,127 +99,172 @@ function nextDay(dateStr: string) {
   return d.toISOString().slice(0, 10)
 }
 
+/**
+ * Fetch completions (row exists = completed)
+ */
 export async function getCompletions(start: string, end: string) {
+  // console.group('📊 getCompletions')
+
   const { data, error } = await supabase
     .from('task_completions')
-    .select('id,task_id,date,completed')
+    .select('task_id, date')
     .gte('date', start)
     .lt('date', nextDay(end))
 
+  // if (error) console.error('❌ Failed to fetch completions:', error)
+  // else console.log(`✅ Completions fetched: ${data.length}`)
+
+  // console.groupEnd()
   return { data, error }
 }
 
+/**
+ * Toggle completion
+ * INSERT = check
+ * DELETE = uncheck
+ */
 export async function toggleCompletion(taskId: string, dateStr: string) {
-  const userId = await getUserId()
+  // console.group('🔁 toggleCompletion')
 
-  const { data: existing, error: getErr } = await supabase
-    .from('task_completions')
-    .select('*')
-    .eq('task_id', taskId)
-    .gte('date', dateStr)
-    .lt('date', nextDay(dateStr))
-    .maybeSingle()
+  try {
+    const userId = await getUserId()
 
-  if (getErr) {
-    return { data: null, error: getErr }
-  }
-
-  if (existing) {
-    const { data, error } = await supabase
+    const { data: existing, error: fetchErr } = await supabase
       .from('task_completions')
-      .update({ completed: !existing.completed })
-      .eq('id', existing.id)
-      .select()
-      .single()
+      .select('id')
+      .eq('task_id', taskId)
+      .eq('date', dateStr)
+      .maybeSingle()
 
-    return { data, error }
-  } else {
+    if (fetchErr) {
+      // console.error('❌ Fetch failed:', fetchErr)
+      return { data: null, error: fetchErr }
+    }
+
+    // ✅ Already completed → UNCHECK → DELETE
+    if (existing) {
+      // console.log('☑️ Exists → deleting row')
+
+      const { error } = await supabase
+        .from('task_completions')
+        .delete()
+        .eq('id', existing.id)
+
+      // if (error) console.error('❌ Delete failed:', error)
+      // else console.log('✅ Unchecked successfully')
+
+      return { data: null, error }
+    }
+
+    // ❌ Not completed → CHECK → INSERT
+    // console.log('⬜ Not exists → inserting row')
+
     const { data, error } = await supabase
       .from('task_completions')
       .insert({
         task_id: taskId,
-        date: dateStr,
-        completed: true,
         user_id: userId,
+        date: dateStr,
       })
       .select()
       .single()
 
+    // if (error) console.error('❌ Insert failed:', error)
+    // else console.log('✅ Checked successfully:', data)
+
     return { data, error }
+  } catch (err) {
+    // console.error('❌ toggleCompletion crashed:', err)
+    return { data: null, error: err }
+  } finally {
+    // console.groupEnd()
   }
 }
 
 /**
- * Progress (computed client-side)
+ * ===============================
+ * PROGRESS (CLIENT SIDE)
+ * ===============================
  */
 export async function getProgress(start: string, end: string) {
-  const { data: tasksData } = await getTasks()
-  const totalTasks = (tasksData || []).length
+  // console.group('📈 getProgress')
 
-  const { data: comps } = await getCompletions(start, end)
+  const { data: tasks } = await getTasks()
+  const { data: completions } = await getCompletions(start, end)
 
+  const totalTasks = tasks?.length || 0
   const counts: Record<string, number> = {}
-  ;(comps || []).forEach((c: any) => {
-    if (c.completed) {
-      counts[c.date] = (counts[c.date] || 0) + 1
-    }
+
+  completions?.forEach(c => {
+    counts[c.date] = (counts[c.date] || 0) + 1
   })
 
-  const results: {
-    date: string
-    tasksCompleted: number
-    totalTasks: number
-    completion: number
-    day: string
-  }[] = []
+  const results = []
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
-  const startDate = new Date(start)
-  const endDate = new Date(end)
-  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-
-  for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
-    const ds = d.toISOString().slice(0, 10)
-    const tasksCompleted = counts[ds] || 0
-    const completion =
-      totalTasks > 0
-        ? Math.round((tasksCompleted / totalTasks) * 100)
-        : 0
+  for (
+    let d = new Date(start);
+    d <= new Date(end);
+    d.setDate(d.getDate() + 1)
+  ) {
+    const date = d.toISOString().slice(0, 10)
+    const completed = counts[date] || 0
 
     results.push({
-      date: ds,
-      tasksCompleted,
+      date,
+      tasksCompleted: completed,
       totalTasks,
-      completion,
-      day: dayNames[new Date(ds).getDay()],
+      completion: totalTasks
+        ? Math.round((completed / totalTasks) * 100)
+        : 0,
+      day: days[d.getDay()],
     })
   }
 
+  // console.log('✅ Progress computed:', results)
+  // console.groupEnd()
   return results
 }
 
 /**
- * Journals
+ * ===============================
+ * JOURNALS
+ * ===============================
  */
 export async function upsertJournal(
   dateStr: string,
   title: string,
   content: string
 ) {
-  const userId = await getUserId()
+  // console.group('📝 upsertJournal')
 
-  const { data, error } = await supabase
-    .from('journals')
-    .upsert(
-      { user_id: userId, date: dateStr, title, content },
-      { onConflict: 'user_id,date' }
-    )
-    .select()
-    .single()
+  try {
+    const userId = await getUserId()
 
-  return { data, error }
+    const { data, error } = await supabase
+      .from('journals')
+      .upsert(
+        { user_id: userId, date: dateStr, title, content },
+        { onConflict: 'user_id,date' }
+      )
+      .select()
+      .single()
+
+    // if (error) console.error('❌ Journal upsert failed:', error)
+    // else console.log('✅ Journal saved:', data)
+
+    return { data, error }
+  } catch (err) {
+    // console.error('❌ upsertJournal crashed:', err)
+    return { data: null, error: err }
+  } finally {
+    // console.groupEnd()
+  }
 }
 
 export async function getJournal(dateStr: string) {
+  // console.group('📖 getJournal')
+
   const { data, error } = await supabase
     .from('journals')
     .select('*')
@@ -387,5 +272,9 @@ export async function getJournal(dateStr: string) {
     .lt('date', nextDay(dateStr))
     .maybeSingle()
 
+  // if (error) console.error('❌ Fetch journal failed:', error)
+  // else console.log('✅ Journal fetched:', data)
+
+  // console.groupEnd()
   return { data, error }
 }
