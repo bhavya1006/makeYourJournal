@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap://make-your-journal.vercel.app/sitemap.xml
