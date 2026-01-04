@@ -1,6 +1,6 @@
 # MakeYourJournal
 
-Deployed at: https://your-deployment-link-here
+Deployed at: https://make-your-journal.vercel.app
 
 MakeYourJournal is a personal productivity and journaling web application built to help users stay consistent with their daily tasks while maintaining a habit of reflection.
 
