@@ -100,10 +100,10 @@ export function MonthlyTracker({ tasks }: MonthlyTrackerProps) {
     let possibleCompletions = 0;
 
     for (let d = new Date(firstDay); d <= endDate; d.setDate(d.getDate() + 1)) {
-      const dateStr = d.toLocaleDateString();
+      const dateISO = d.toISOString().slice(0,10);
       totalDays++;
       
-      const dayCompletions = tasks.filter(task => task.completionByDate?.[dateStr] === true).length;
+      const dayCompletions = tasks.filter(task => task.completionByDate?.[dateISO] === true).length;
       if (dayCompletions > 0) {
         activeDays++;
       }
